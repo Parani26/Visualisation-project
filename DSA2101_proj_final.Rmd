@@ -1,0 +1,332 @@
+---
+title: "DSA2101 Project"
+author: "Parani, Harish, Siddharth, Joo Kang, Elena"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, include = TRUE,
+                      fig.align = "center",  out.width = "80%")
+```
+#### Introduction
+The purpose of this project is to carry out data visualisations that answer the question: How does eclipse visibility vary across different states or regions in the US? First, we shall discuss what eclipses are. Eclipses occur when precise alignments of the sun, earth and moon occur. These can be categorised into; total solar eclipses where the moon entirely blocks the sun, total lunar eclipses where the earth’s shadow completely covers the moon, partial solar eclipses where the moon only partially covers the sun or partial lunar eclipses where only a part of the moon passes into the earth shadow. Using the following datasets; `“eclipse_annular_2023.csv”`, `“eclipse_total_2024.csv”`, `“eclipse_partial-2023.csv”` and `“eclipse_partial_2024.csv”`, it is possible to make visualisations regarding two particular events; the annular solar eclipse that occurred across the US on October 14, 2023, and the total solar eclipse that occurred across the US on April 8 2024. 
+
+The datasets contain crucial information regarding the location and timings of the different stages of the eclipse that occurred at each location. Information regarding the `state` in the US, and the `latitude` and `longitude` of the location of the event were recorded in the dataset. Moreover, the `time` at which the moon first contacts the sun in this location, at which the eclipse is at 50% in this location,  at which totality begins in this location, at which totality ends in this location, at which the eclipse is back to 50% in this location, at which the moon last contacts the sun in this location in the annular and total datasets is given. On the other hand, the time at which the moon first contacts the sun in this location, at which the eclipse is at 50% of this location's maximum, at which the eclipse reaches 100% of this location's maximum, at which the eclipse is again at 50% of this location's maximum and at which the moon last contacts the sun in this location is provided in the other partial datasets. In this project, we will produce visualisations and make observations about these two particular events as seen in the US. 
+
+
+#### Data Cleaning and Summary
+To prepare the dataset for analysis and visualisation, several steps were taken to clean and transform the data. Firstly, we load the TidyTuesday datasets. After this, we performed the `glimpse()` operation on the individual datasets to get summary statistics regarding each recorded variable (column) in the dataset. Attached is the code used to produce the summary statistics. Notably, the eclipse annular and the eclipse total datasets have only 811 and 3330 observations respectively which is far lesser than those of the eclipse partial 2023 and eclipse partial 2024 datasets which have 31363 and 28844 observations respectively. Missing entries were checked for with the following code chunk. No missing values were in the data.
+
+Next, the function `tidy_eclipse_data()` was defined to tidy the datasets. Column names were standardised by converting them to lowercase and replacing spaces with underscores for consistency. Time-related columns were formatted as hms objects to allow for accurate time-based operations and visualisations. Additionally, descriptive labels were assigned to eclipse event phases to make the data more interpretable and ready for further analysis. A combined eclipse data was also created by binding the datasets together to produce a comprehensive dataset to be used in further analysis. This was then tidied with the following code chunk to ensure that the `eclipse_type` and `eclipse_event` were recorded as variables with the times being recorded as observations. The data was then grouped by `eclipse_type` so that further calculations would be computed by `eclipse_type`. Key summary statistics, including the number of unique locations for each eclipse type, the average latitude and longitude of observation points to determine average geographical coordinates and the total number of recorded events were computed so that a better sense can be made of the data and so that the optimal visualisations that could be determined. These summary statistics have been attached below. `ridgeline_data()` was then derived by converting the time column into an hms object and by filtering out the partial eclipse events so that it can be used for future visualisations. `relationships_data()` was also created by only selecting the information regarding latitude, longitude, time, and eclipse type and filtering out values with missing time values which will also be used for future visualization. `geo_heatmap()` was also created by grouping the combined tidy data by `name`, `state`, `latitude`, `longitude` and `eclipse_type` before producing an event count column and removing all partial eclipse observations. This will also be used in future visualisations.
+
+#### Install Packages
+```{r}
+# Uncomment to install required R packages
+# install.packages("tidytuesdayR")
+# install.packages("hms")
+# install.packages("ggridges")
+# install.packages("viridis")
+# install.packages("maps")
+# install.packages("rnaturalearth")
+# install.packages("gganimate")
+
+
+# Load required packages
+library(stringr)
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(jsonlite)
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(ggridges)
+library(viridis)
+library(hms)
+library(tidytuesdayR)
+library(sf)
+library(maps)
+library(rnaturalearth)
+```
+
+#### Fetch TidyTuesday project datasets released on April 9th 2024
+```{r}
+data <- tidytuesdayR::tt_load('2024-04-09')
+```
+
+#### Load individual datasets
+```{r}
+eclipse_annular_2023 <- data$eclipse_annular_2023
+eclipse_partial_2023 <- data$eclipse_partial_2023
+eclipse_partial_2024 <- data$eclipse_partial_2024
+eclipse_total_2024 <- data$eclipse_total_2024
+
+
+# Viewing the data
+glimpse(eclipse_annular_2023)
+glimpse(eclipse_partial_2023)
+glimpse(eclipse_partial_2024)
+glimpse(eclipse_total_2024)
+```
+
+#### Viewing summary statistics
+```{r}
+summary(eclipse_annular_2023)
+summary(eclipse_partial_2023)
+summary(eclipse_partial_2024)
+summary(eclipse_total_2024)
+```
+
+#### Checking for any missing entries
+```{r}
+sapply(eclipse_annular_2023, function(x) sum(is.na(x)))
+sapply(eclipse_partial_2023, function(x) sum(is.na(x)))
+sapply(eclipse_partial_2024, function(x) sum(is.na(x)))
+sapply(eclipse_total_2024, function(x) sum(is.na(x)))
+```
+
+#### Tidy the datasets
+```{r}
+### Define function to tidy dataset
+tidy_eclipse_data <- function(df, eclipse_type) {
+  df <- df %>%
+    # Standardize column names
+    rename_with(~ str_to_lower(.) %>% str_replace_all(" ", "_")) %>%
+    # Convert time columns to `hms` format (e.g., eclipse_1 to eclipse_6)
+    mutate(across(starts_with("eclipse_"), ~ as_hms(.), .names = "{.col}")) %>%
+    # Add a column for the eclipse type (annular, total, partial)
+    mutate(eclipse_type = eclipse_type)
+}
+
+### Tidy the dataset
+eclipse_annular_2023 <- tidy_eclipse_data(eclipse_annular_2023, "annular_2023")
+eclipse_total_2024 <- tidy_eclipse_data(eclipse_total_2024, "total_2024")
+eclipse_partial_2023 <- tidy_eclipse_data(eclipse_partial_2023, "partial_2023")
+eclipse_partial_2024 <- tidy_eclipse_data(eclipse_partial_2024, "partial_2024")
+```
+
+#### Creating combined eclipse dataset
+```{r}
+combined_eclipse_data <- bind_rows(
+  eclipse_annular_2023,
+  eclipse_total_2024,
+  eclipse_partial_2023,
+  eclipse_partial_2024
+)
+glimpse(combined_eclipse_data)
+```
+
+#### Tidying of combined dataset
+```{r}
+combined_eclipse_data_long <- combined_eclipse_data %>%
+  pivot_longer(
+    cols = c(eclipse_1, eclipse_2, eclipse_3, eclipse_4, eclipse_5, eclipse_6),
+    names_to = "eclipse_event",
+    values_to = "time"
+  ) %>% # Changing the combined dataset from wide to long format: eclipse event recorded as variables and timings as observations
+  mutate(
+    # Step 2: Create readable labels for `eclipse_type`
+    eclipse_type = case_when(
+      eclipse_type == "annular_2023" ~ "2023 Annular Eclipse",
+      eclipse_type == "total_2024" ~ "2024 Total Eclipse",
+      eclipse_type == "partial_2023" ~ "2023 Partial Eclipse",
+      eclipse_type == "partial_2024" ~ "2024 Partial Eclipse"
+    ),
+    # Make `eclipse_event` descriptive
+    eclipse_event = case_when(
+      eclipse_event == "eclipse_1" ~ "First Contact",
+      eclipse_event == "eclipse_2" ~ "50% Eclipse Start",
+      eclipse_event == "eclipse_3" ~ if_else(eclipse_type == "2023 Annular Eclipse" | eclipse_type == "2024 Total Eclipse", "Annularity/Totality Begins", "100% Eclipse Max"),
+      eclipse_event == "eclipse_4" ~ if_else(eclipse_type == "2023 Annular Eclipse" | eclipse_type == "2024 Total Eclipse", "Annularity/Totality Ends", "50% Eclipse End"),
+      eclipse_event == "eclipse_5" ~ if_else(eclipse_type == "2023 Annular Eclipse" | eclipse_type == "2024 Total Eclipse", "50% Eclipse End", "Last Contact"),
+      eclipse_event == "eclipse_6" ~ "Last Contact"
+    )
+  )
+glimpse(combined_eclipse_data_long)
+head(combined_eclipse_data_long)
+```
+
+#### Obtain more detailed statistics regarding the combined tidied dataset
+```{r}
+summary_statistics <- combined_eclipse_data_long %>%
+  group_by(eclipse_type) %>% # Subsequent calculations will be done by eclipse type
+  summarize(
+    num_locations = n_distinct(name),                               # Count unique locations per eclipse type
+    avg_latitude = mean(lat, na.rm = TRUE),                        # Average latitude
+    avg_longitude = mean(lon, na.rm = TRUE),                       # Average longitude
+    total_events = n(),                                             # Total number of events for each eclipse type
+    earliest_event = hms::as_hms(min(time, na.rm = TRUE)),        # Convert to readable format using hms
+    latest_event = hms::as_hms(max(time, na.rm = TRUE))           # Convert to readable format using hms
+  )
+
+# Display summary statistics
+head(summary_statistics)
+```
+
+#### Creating ridgeline_data which contains annular and total eclipse data
+```{r}
+ridgeline_data <- combined_eclipse_data_long %>%
+  mutate(time = as_hms(time)) %>%
+  filter(eclipse_type %in% c("2023 Annular Eclipse", "2024 Total Eclipse"))
+
+glimpse(ridgeline_data)
+```
+
+#### Creating relationships_data that contain latitude, longitude, time and eclipse type only
+```{r}
+relationships_data <- combined_eclipse_data_long %>%
+  select(lat, lon, time, eclipse_type)%>%
+  filter(!is.na(time))
+
+glimpse(relationships_data)
+```
+
+#### Aggregating data columns that will be useful in creating a heatmap
+```{r}
+geo_heatmap_data <- combined_eclipse_data_long %>%
+  group_by(name, lat, lon, eclipse_type) %>%
+  summarise(event_count = n(), .groups = "drop") %>%  # Count events per location
+  mutate(event_count= as.numeric(event_count)) %>%
+  filter(eclipse_type == c("2023 Annular Eclipse", "2024 Total Eclipse"))
+
+glimpse(geo_heatmap_data)
+```
+
+#### Geographic Map Visualisation
+This geographic map visualisation is designed to explore how eclipse visibility varies across different states or regions in the United States. It visualises the distribution of eclipse types across different states. The variables used in this visualisation include the geographic coordinates (`longitude` and `latitude`) of observation points, the `eclipse_type` (distinguishing between `"2023 Annular Eclipse"` and `"2024 Total Eclipse"`), and the `state` boundaries provided by the `ne_states()` function. The map uses distinct colours (red for the `2023 Annular Eclipse` and blue for the `2024 Total Eclipse`) to represent the two eclipse types, plotted as points on a map of the US. This type of visualisation is ideal for answering the question because it provides a clear spatial representation of where in the US was each eclipse type observed. By plotting the data geographically, patterns of areas in which eclipses occur more frequently and the distribution of observation points are clear. The use of spatial boundaries helps contextualise the observations, making it easier to interpret how the visibility of the eclipse varies geographically. Additionally, the clean design ensures that the focus remains on the relationship between the geographic location and eclipse type, effectively addressing the question at hand.
+
+```{r}
+us_map <- ne_states(country = "United States of America", returnclass = "sf")
+
+# converting dataset into sf object for spatial plotting
+# 'crs = 4326' defines the coordinate reference system as WGS84, standard for geographic data
+eclipse_data_geom_2023 <- st_as_sf(geo_heatmap_data, coords = c("lon", "lat"), crs = 4326)
+
+
+ggplot() +
+  geom_sf(data = us_map, fill = "lightblue", color = "black") + # Add the U.S. map layer using 'geom_sf', 'data = us_map' specifies the U.S. state boundaries
+  geom_sf(data = eclipse_data_geom_2023, aes(color = eclipse_type), size = 1.2) + # 'data = eclipse_data_geom_2023' specifies the eclipse data converted to spatial format
+  scale_color_manual(values = c("2023 Annular Eclipse" = "indianred", "2024 Total Eclipse" = "steelblue")) + # set the plot features
+  labs(title = "Eclipse Events Across the U.S. in 2023 and 2024",
+       color = "Eclipse Type",
+       shape = "Eclipse Event") +
+  coord_sf(xlim = c(-125, -65), ylim = c(20, 52)) +
+  theme_minimal() +
+  theme(legend.position = "top",
+        plot.title = element_text(hjust = 0.5, size = 15, face = "bold"))
+```
+
+#### Ridgeline Plot
+This ridgeline plot visualises how eclipse visibility varies across different states in the US by showing the distribution of eclipse phases over time for the `2023 Annular Eclipse` and the `2024 Total Eclipse`. The variables used in this visualisation include the `time` of different eclipse phases, `states` and `eclipse_type`. The variable `eclipse_type` is used as the fill aesthetic to distinguish between the `2023 Annular Eclipse` and the `2024 Total Eclipse`, with unique colours assigned to each type (orange for 2023 and blue for 2024). The visualisation is ideal for addressing the question because it provides a clear representation of how the timing of eclipse visibility varies across states. The ridgeline format allows for easy comparison of the time distributions for each state, highlighting patterns such as whether certain states experienced earlier or later phases of the eclipses. Furthermore, the height of the ridgeline plots reflects the concentration or frequency of eclipse phases observed during specific time intervals for each state. Taller peaks signify a higher intensity or greater frequency of eclipse activity at those times, while shorter peaks indicate lower intensity or less frequent activity during the corresponding periods. Adjusting the x-axis limits based on the earliest and latest observed eclipse events ensures that the x-axis is restricted to the actual time range of the eclipse events. This prevents the ridgeline plot's smoothing effect from displaying timings when no eclipse events occurred. Furthermore, the different distinct colours used help enhance clarity between the `2023 Annular Eclipse` and the `2024 Total Eclipse`. The visualization is both aesthetically appealing and easy to interpret. This ridgeline plot effectively captures temporal and spatial variations in eclipse visibility.
+
+```{r}
+# Earliest and latest timing of eclipses
+earliest_event <- summary_statistics %>%
+  filter(eclipse_type == "2023 Annular Eclipse") %>% 
+ pull(earliest_event)
+
+latest_event <- summary_statistics %>%
+  filter(eclipse_type == "2024 Total Eclipse") %>%  
+pull(latest_event)
+
+#Creating ridgeline plot
+ggplot(ridgeline_data %>% 
+         filter(eclipse_type %in% c("2023 Annular Eclipse", "2024 Total Eclipse")), # Subset the data to include only the "2023 Annular Eclipse" and "2024 Total Eclipse" rows 
+       aes(x = time, y = state, fill = eclipse_type)) + 
+  geom_density_ridges(alpha = 0.5, scale = 1.2, # Adds the ridgeline plot layer 
+                      rel_min_height = 0.01) + 
+  labs(title = "Distribution of Eclipse Phases by State", 
+       x = "Time of Eclipse Phases", # Time of eclipse phases is mapped to the x-axis 
+       y = "State") + # States are mapped to the y-axis as categories for ridgelines 
+  theme_minimal(base_size = 15) +  # Increase base font size xs
+  scale_fill_manual(values = c("2023 Annular Eclipse" = "#FFB74D", # Add more plot features 
+                                "2024 Total Eclipse" = "#64B5F6")) + 
+  theme( 
+    legend.title = element_blank(), 
+    panel.background = element_rect(fill = "white"), 
+    plot.title = element_text(hjust = 0.5, size = 15, face = "bold"), 
+    axis.title = element_text(size = 13), 
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10), 
+  )+ 
+  scale_x_time( 
+    breaks = scales::breaks_width(1800), 
+    labels = scales::time_format("%H:%M"), 
+    limits = c(hms::as_hms(earliest_event ), hms::as_hms(latest_event))  # Define the limits for the x-axis 
+  )
+```
+
+#### Pyramid Barplot Visualisation
+The pyramid barplot visualises the distribution of the number of different eclipse types across the different states in the US, the variables used include `state`, `count` (number of eclipse observations) and `eclipse_type`. The y-axis represents the total number of eclipses observed (scaled to hundreds), with the lower half of the chart representing 2023 eclipses (Annular and Partial) and the upper half representing 2024 eclipses (Total and Partial). The x-axis represents U.S. states, sorted by total eclipse observations, with states having the highest observations appearing first. This highlights the contrast in eclipse occurrences, showing which states tend to experience more eclipses. Additionally, the pyramid bar structure effectively contrasts the visibility of full eclipses versus partial eclipses, allowing for a comparison of eclipse occurrences across the two different years. This makes it easy to tell which state tends to have a higher total/annular eclipse. This type of visualisation is ideal for answering the question because it allows for a direct comparison of eclipse visibility across states while distinguishing between different types of eclipses and years. The mirrored structure of the pyramid chart highlights the distribution of eclipse observations in 2023 versus 2024 each year. The use of colour coding for the eclipse type further enhances clarity, enabling the audience to easily differentiate between annular, total, and partial eclipses. Additionally, the alignment of states along the x-axis allows for quick identification of states with the highest and lowest eclipse observations, making this visualisation both informative and visually intuitive.
+
+```{r}
+### Prepare Eclipse Counts
+eclipse_counts <- combined_eclipse_data_long %>%
+  group_by(state, eclipse_type) %>%
+  summarise(count = n()) %>%
+  ungroup() %>%
+  mutate(
+    year = if_else(str_detect(eclipse_type, "2023"), "2023", "2024"),
+    state = fct_reorder(state, count, .desc = TRUE)
+  )
+
+# Calculate total eclipse counts for each state
+eclipse_counts_total <- eclipse_counts %>%
+  group_by(state) %>%
+  summarise(total_count = sum(abs(count))) %>%
+  ungroup()
+
+# Reorder `state` based on the total eclipse count in decreasing order
+eclipse_counts_pyramid_sorted <- eclipse_counts %>%
+  left_join(eclipse_counts_total, by = "state") %>%
+  mutate(
+    count = if_else(year == "2023", -count, count),  # Negative counts for 2023
+    state = fct_reorder(state, total_count, .desc = TRUE)  # Reorder by total eclipse counts
+  ) %>%
+  rename("Eclipse Type" = eclipse_type)
+
+# Plotting the pyramid barplot
+ggplot(eclipse_counts_pyramid_sorted, aes(x = state, y = count/100, fill = `Eclipse Type`)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  scale_y_continuous(
+    name = "Total Number of Eclipses Observed\n(in Hundreds)",
+    labels = abs
+  ) +
+  scale_x_discrete(name = "State") +
+  scale_fill_manual(values = c("2023 Annular Eclipse" = "orange",
+                               "2024 Total Eclipse" = "blue",
+                               "2023 Partial Eclipse" = "purple",
+                               "2024 Partial Eclipse" = "green")) +
+  theme_classic()+
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1,size = 10),
+    legend.position = "top",
+    plot.margin = margin(3,3 ,3 ,1),
+    legend.box.margin = margin(0, 10, 0, 0),
+    plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10),
+    plot.background = element_rect(fill = "white", colour = "white"),
+    legend.key.size = unit(0.2, "cm")
+  ) +
+  labs(
+    title = "Pyramid Barplot of Eclipse Type Counts by State",
+    subtitle = "2023 Eclipses on the Bottom, 2024 Eclipses on the Top"
+  )
+```
+
+#### Teamwork
+Parani - Wrote the report writing and carried out final code cleaning
+Harish - Carried out Initial data cleaning and produced summary statistics
+Siddharth - Produced geographical map summaries
+Joo Kang - Produced pyramid barplot
+Elena - Produced the ridgeline plot
+
+#### References
+[1] TidyTuesday: "TidyTuesday Project Dataset: 2024-04-09." Retrieved from:
+https://github.com/rfordatascience/tidytuesday/blob/master/data/2024/2024-04-09/readme.md
+[2] rnaturalearth: South, Andy. (2017). Natural earth: World Map Data from Natural Earth. R package version 0.1.0. https://CRAN.R-project.org/package=rnaturalearth
+
+AI Prompts Used: “what is the best way to visualise the data with columns state, town, latitude, longitude ,eclipse_type, eclipse event I have in the form of US map?”
+
+
